@@ -95,8 +95,7 @@ def identify_items(config): # count all unique configuration types
                 continue
             elif not gp in grp_names:
                 grp_names.append(gp)
-
-    return (obj_names, objgrp_names, acl_names, grp_names)
+    return(obj_names, objgrp_names, acl_names, grp_names)
 
 def remove_list(item_count): # generate a list of "list" items that aren't used
     config_list = []
@@ -150,7 +149,7 @@ def find_remark_task(hash,acl):
                     if ticket:
                         return ticket.group(0), acl[remark_line]
                 except Exception as e:
-                    print (e)
+                    print(e)
 
 def add_2acl_dict(acl_dict, ticket, remark, ace): 
     if ticket not in acl_dict:
@@ -191,7 +190,7 @@ def get_aged_aces(acl_dict, acl, acl_brief): # searches for ace's with zero hitc
 ##########################################################################################################################
 ##########################################################################################################################
 
-def main ():
+def main():
     DO_ACL_EVAL = False  # Do ACL evaluation of hits
     DO_UNUSED_EVAL = True # Do evaluation of unused configuraiton items
     DO_DUP_EVAL = False  # Do evaluation of duplicate items
@@ -213,18 +212,15 @@ def main ():
     password=args.password
     hostname = args.host
 
-    if "@" in args.host:
+    if "@" in args.host: # for those that username@hostname
         username=args.host.split('@')[0]
         hostname=args.host.split('@')[1]
-
     if args.file:
         import config # Imports config.py for testing only
         username=config.username
         password=config.password
-
     if not password:
         password = getpass('Enter the ASA password: ')
-
     if args.key or args.secret:
         if not args.key and not args.secret:
             sys.exit("You must supply both an API key and secret ID to use this feature")
@@ -232,16 +228,15 @@ def main ():
             sys.exit("\nAPI Not implemented yet") # until we have this working
             #username, password = get_pwmcreds(args.key,args.secret)
     elif not username or not password:
-        print ("\nWe need username and password to continue...")
-    
+        sys.exit("\nWe need username and password to continue...")
     if args.debug:
-        print ("DEBUG ON")
+        print("DEBUG ON")
 
-    print ("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
-    print ("-----------------------------------------------------------\n\n")
+    print("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
+    print("-----------------------------------------------------------\n\n")
 
     try:
-        print ("Logging into %s" % hostname)
+        print("Logging into %s" % hostname)
         ssh_connection = Netmiko(host=hostname, username=username, password=password, device_type='cisco_asa')
         ssh_connection.find_prompt()         # Expects to receive prompt back from the ASA
         ssh_connection.send_command('term pager 0')
@@ -249,62 +244,59 @@ def main ():
     except Exception as e:                  # If login fails loops to begining displaying the error message
         print(e)
 
-    print ("Retrieving show running-configuration")
+    print("Retrieving show running-configuration")
     asa_config = ssh_connection.send_command('show run').split("\n")
     
-    print ("Evaluating Configuration Items....")
+    print("Evaluating Configuration Items....")
     # Find all unique names for Objects, Object-Groups, ACLs, Group-Policies
     obj_names, objgrp_names, acl_names, grp_names = identify_items(asa_config)
 
-    sh_acls = {}
-    sh_briefs = {}
-
-    # TESTING -- allows us to single out a single ACL 
-    #acl_names = []
-    #acl_names.append("INSIDE-IN")
-
     if DO_ACL_EVAL:
-        print ("Gathering all sh access-list / brief")
+        sh_acls = {}
+        sh_briefs = {}
+        # TESTING -- allows us to single out a single ACL 
+        #acl_names = []
+        #acl_names.append("INSIDE-IN")
+        print("Gathering all sh access-list / brief")
         for acl in acl_names:
-            print (" - " + acl + ".", end='')
+            print(" - " + acl + ".", end='')
             sh_acls[acl] = ssh_connection.send_command("show access-list %s " % acl).split("\n")
-            print (".", end='')
+            print(".", end='')
             sh_briefs[acl] = ssh_connection.send_command("show access-list %s brief " % acl).split("\n")
-            print (". done")
+            print(". done")
 
     ssh_connection.disconnect()
-    print ("-Disconecting from %s...\n" % hostname)
-
-    acl_dict = {}
+    print("-Disconecting from %s...\n" % hostname)
 
     if DO_ACL_EVAL:
-        print ("Starting ACE Evaluations....")
+        acl_dict = {}
+        print("Starting ACE Evaluations....")
         for acl in acl_names:
-            print ("> Processing ACL -  %s" % acl)
+            print("> Processing ACL -  %s" % acl)
             acl_dict = get_aged_aces(acl_dict, sh_acls[acl], sh_briefs[acl])
-        print ("done\n")
+        print("done\n")
 
-        print ("Writing Aged ACLs to file.", end="")
+        print("Writing Aged ACLs to file.", end="")
         file = open("aged_acls.txt", "w")
         for task in acl_dict: 
-            print (".", end="")
+            print(".", end="")
             file.write("\n------- %s -------\n" % task)
             for line in acl_dict[task]:
                 file.write("> %s\n" % line)
         file.close()
-        print (". done")
+        print(". done")
 
     if DO_UNUSED_EVAL: # Identify Unused Configurations, and generate the config to remove them
-        print ("Searching configuration for unused items")
+        print("Searching configuration for unused items")
         unused_items = []
         unused_items.extend(gen_rmlist_config(remove_list(ItemCount(grp_names, asa_config).grp_count()), "group-policy"))
         unused_items.extend(gen_rmlist_config(remove_list(ItemCount(acl_names, asa_config).acl_count()), "access-list"))
         unused_items.extend(gen_rmdict_config(remove_dict(ItemCount(objgrp_names, asa_config).obj_count()), "object-group"))
         unused_items.extend(gen_rmdict_config(remove_dict(ItemCount(obj_names, asa_config).obj_count()), "object"))
-        print (*unused_items, sep="\n")
-        print ("done")
+        print(*unused_items, sep="\n")
+        print("done")
 
-    print ("\n\nAudit Complete - Exiting.")
+    print("\n\nAudit Complete - Exiting.")
 
 ##########################################################################################################################
 ##########################################################################################################################
