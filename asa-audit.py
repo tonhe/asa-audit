@@ -8,6 +8,9 @@ from getpass import getpass
 from netmiko import Netmiko
 from datetime import datetime
 
+# Our sole global variable
+DEBUG=False
+
 class ItemCount:
     def __init__(self, items, config):
         self.items = items
@@ -63,6 +66,10 @@ class ItemCount:
 
 ##########################################################################################################################
 ##########################################################################################################################
+
+def dprint(line):
+    if DEBUG:
+        print("(d) %s" % line)
 
 def identify_items(config): # count all unique configuration types
     obj_names = {} # object names
@@ -193,7 +200,6 @@ def get_aged_aces(acl_dict, acl, acl_brief): # searches for ace's with zero hitc
 def main():
     DO_ACL_EVAL = False  # Do ACL evaluation of hits
     DO_UNUSED_EVAL = True # Do evaluation of unused configuraiton items
-    DO_DUP_EVAL = False  # Do evaluation of duplicate items
     VERSION = "0.0.6"
 
     parser = argparse.ArgumentParser()
@@ -230,7 +236,9 @@ def main():
     elif not username or not password:
         sys.exit("\nWe need username and password to continue...")
     if args.debug:
-        print("DEBUG ON")
+        global DEBUG 
+        DEBUG = True
+        print("DEBUG ON\n")
 
     print("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
     print("-----------------------------------------------------------\n\n")
@@ -276,7 +284,7 @@ def main():
             acl_dict = get_aged_aces(acl_dict, sh_acls[acl], sh_briefs[acl])
         print("done\n")
 
-        print("Writing Aged ACLs to file.", end="")
+        print("Writing aged_acls.txt to disk.", end="")
         file = open("aged_acls.txt", "w")
         for task in acl_dict: 
             print(".", end="")
@@ -284,7 +292,7 @@ def main():
             for line in acl_dict[task]:
                 file.write("> %s\n" % line)
         file.close()
-        print(". done")
+        print(". done\n")
 
     if DO_UNUSED_EVAL: # Identify Unused Configurations, and generate the config to remove them
         print("Searching configuration for unused items")
@@ -293,8 +301,16 @@ def main():
         unused_items.extend(gen_rmlist_config(remove_list(ItemCount(acl_names, asa_config).acl_count()), "access-list"))
         unused_items.extend(gen_rmdict_config(remove_dict(ItemCount(objgrp_names, asa_config).obj_count()), "object-group"))
         unused_items.extend(gen_rmdict_config(remove_dict(ItemCount(obj_names, asa_config).obj_count()), "object"))
-        print(*unused_items, sep="\n")
-        print("done")
+        #print(*unused_items, sep="\n")
+        print("done\n")
+
+        print("Writing unused_items.txt to disk.", end="")
+        file = open("unused_items.txt", "w")
+        for line in unused_items: 
+            print(".", end="")
+            file.write("%s\n" % line)
+        file.close()
+        print(". done\n")
 
     print("\n\nAudit Complete - Exiting.")
 
