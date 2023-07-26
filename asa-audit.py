@@ -4,7 +4,8 @@ import sys
 import re
 #import time
 import argparse
-from getpass import getpass
+import keyring
+import getpass
 from netmiko import Netmiko
 from datetime import datetime
 
@@ -198,16 +199,20 @@ def get_aged_aces(acl_dict, acl, acl_brief): # searches for ace's with zero hitc
 ##########################################################################################################################
 
 def main():
+    VERSION = "0.1.0"
+    KEYRING="asa-audit"
     DO_ACL_EVAL = False  # Do ACL evaluation of hits
     DO_UNUSED_EVAL = True # Do evaluation of unused configuraiton items
-    VERSION = "0.0.6"
+    SAVE_CREDS_TO_KEYRING = True # Do we save all of our creds to the keyring by default?
+
+    print("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
+    print("-----------------------------------------------------------\n")
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("host", metavar="hostname", help="Hostname or IP of the ASA")
-    parser.add_argument("-k", "--key", dest="key", help="API key for Secret Server",default="")
-    parser.add_argument("-s", "--secret", dest="secret", help="Secret ID for Secret Server", default="") 
-    parser.add_argument("-u", "--user", dest="user", help="User ID to Login with", default="")
+    parser.add_argument("host", help="Hostname or IP of the ASA", nargs="*")
+    parser.add_argument("-k", "--keyring", dest="keyring", help="Pull password from local keyring (by hostname)", action="store_true")
+    parser.add_argument("-u", "--user", dest="user", help="User ID to Login with (Default: admin)", default="")
     parser.add_argument("-p", "--password", dest="password", help="Password for User ID (interactive login is default)", default="")
     parser.add_argument("-d", dest="debug", help=argparse.SUPPRESS, action="store_true")
     parser.add_argument("-f", dest="file", help=argparse.SUPPRESS, action="store_true")
@@ -216,33 +221,29 @@ def main():
 
     username=args.user
     password=args.password
-    hostname = args.host
 
-    if "@" in args.host: # for those that username@hostname
-        username=args.host.split('@')[0]
-        hostname=args.host.split('@')[1]
-    if args.file:
-        import config # Imports config.py for testing only
-        username=config.username
-        password=config.password
-    if not password:
-        password = getpass('Enter the ASA password: ')
-    if args.key or args.secret:
-        if not args.key and not args.secret:
-            sys.exit("You must supply both an API key and secret ID to use this feature")
-        else:  
-            sys.exit("\nAPI Not implemented yet") # until we have this working
-            #username, password = get_pwmcreds(args.key,args.secret)
-    elif not username or not password:
-        sys.exit("\nWe need username and password to continue...")
     if args.debug:
         global DEBUG 
         DEBUG = True
-        print("DEBUG ON\n")
+        print(">Debug ON")
 
-    print("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
-    print("-----------------------------------------------------------\n\n")
-
+    if args.host:
+        hostname = args.host[0]
+    if not hostname:
+        hostname = input("Enter the ASA Management IP/Hostname: ")
+    if "@" in args.host: # for those that username@hostname
+        username=args.host.split('@')[0]
+        hostname=args.host.split('@')[1]
+    if args.keyring:
+        password=keyring.get_password(KEYRING, hostname)
+        dprint ("password=keyring.get_password(%s, %s) == %s" % (KEYRING, hostname, password))
+        if not password:
+            sys.exit("\nPassoword for %s not found in keyring" % hostname)
+    while not username:
+        username = getpass.getuser('Enter the FDM username: ')
+    while not password:
+        password = getpass.getpass('Enter the FDM password: ')
+  
     try:
         print("Logging into %s" % hostname)
         ssh_connection = Netmiko(host=hostname, username=username, password=password, device_type='cisco_asa')
@@ -251,6 +252,9 @@ def main():
 
     except Exception as e:                  # If login fails loops to begining displaying the error message
         print(e)
+    
+    if SAVE_CREDS_TO_KEYRING:
+        keyring.set_password(KEYRING, hostname, password)
 
     print("Retrieving show running-configuration")
     asa_config = ssh_connection.send_command('show run').split("\n")
