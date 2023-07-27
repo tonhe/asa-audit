@@ -204,19 +204,20 @@ def main():
     DO_ACL_EVAL = False  # Do ACL evaluation of hits
     DO_UNUSED_EVAL = True # Do evaluation of unused configuraiton items
     SAVE_CREDS_TO_KEYRING = True # Do we save all of our creds to the keyring by default?
+    AUTO_KEYCHAIN = True # Automagicallu try the keychain if no password supplied
 
     print("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
     print("-----------------------------------------------------------\n")
 
     parser = argparse.ArgumentParser()
-
-    parser.add_argument("host", help="Hostname or IP of the ASA", nargs="*")
-    parser.add_argument("-k", "--keyring", dest="keyring", help="Pull password from local keyring (by hostname)", action="store_true")
+    parser = argparse.ArgumentParser(prog="ASA-Audit", 
+                                     description="Auditing of ASA Configurations ACE's and Config Items")
+    parser.add_argument("host", help="Hostname or IP of the ASA", default="", nargs="*")
     parser.add_argument("-u", "--user", dest="user", help="User ID to Login with (Default: admin)", default="")
+    parser.add_argument("-k", "--keyring", dest="keyring", help="Pull password from local keyring (by hostname)", action="store_true")
     parser.add_argument("-p", "--password", dest="password", help="Password for User ID (interactive login is default)", default="")
     parser.add_argument("-d", dest="debug", help=argparse.SUPPRESS, action="store_true")
     parser.add_argument("-f", dest="file", help=argparse.SUPPRESS, action="store_true")
-
     args = parser.parse_args()
 
     username=args.user
@@ -234,22 +235,22 @@ def main():
     if "@" in args.host: # for those that username@hostname
         username=args.host.split('@')[0]
         hostname=args.host.split('@')[1]
-    if args.keyring:
+    while not username:
+        username = getpass.getuser('Username: ')
+    if args.keyring or (not password and AUTO_KEYCHAIN):
+        print("Pulling password from local keyring.")
         password=keyring.get_password(KEYRING, hostname)
         dprint ("password=keyring.get_password(%s, %s) == %s" % (KEYRING, hostname, password))
         if not password:
-            sys.exit("\nPassoword for %s not found in keyring" % hostname)
-    while not username:
-        username = getpass.getuser('Enter the FDM username: ')
+            print("Passoword for %s not found in keyring\n" % hostname)
     while not password:
-        password = getpass.getpass('Enter the FDM password: ')
+        password = getpass.getpass('Password: ')
   
     try:
         print("Logging into %s" % hostname)
         ssh_connection = Netmiko(host=hostname, username=username, password=password, device_type='cisco_asa')
         ssh_connection.find_prompt()         # Expects to receive prompt back from the ASA
         ssh_connection.send_command('term pager 0')
-
     except Exception as e:                  # If login fails loops to begining displaying the error message
         print(e)
     
