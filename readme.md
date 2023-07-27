@@ -3,21 +3,23 @@ Cisco ASA Audit Tool
 
 NAME
 
-	ASA-Audit - Cisco ASA Auditing tool
+    ASA-Audit - Cisco ASA Auditing tool
 
 SYNOPSIS
 
-    usage: working_asa-audit.py [-h] [-k KEY] [-s SECRET] [-u USER] [-p PASSWORD] hostname
+    usage: pythong3 asa-audit.py [-h] [-u USER] [-k] [-p] [host ...]
+
+    Auditing of ASA Configurations ACE's and Config Items
 
     positional arguments:
-        hostname              Hostname or IP of the ASA
+    host                  Hostname or IP of the ASA
 
     options:
-        -h, --help                          Show this help message and exit
-        -k KEY, --key KEY                   API key for Secret Server
-        -s SECRET, --secret SECRET          Secret ID for Secret Server
-        -u USER, --user USER                User ID to Login with
-        -p PASSWORD, --password PASSWORD    Password for User ID (interactive login is default)
+    -h, --help            show this help message and exit
+    -u USER, --user USER  User ID for login
+    -k, --keyring         Pull password from local keyring (by hostname)
+    -p, --password        Change keyring password via interactive login
+
 
 DESCRIPTION
 

@@ -210,10 +210,10 @@ def main():
     print("-----------------------------------------------------------\n")
 
     parser = argparse.ArgumentParser()
-    parser = argparse.ArgumentParser(prog="ASA-Audit", 
+    parser = argparse.ArgumentParser(prog="python3 asa-audit.py", 
                                      description="Auditing of ASA Configurations ACE's and Config Items")
     parser.add_argument("host", help="Hostname or IP of the ASA", default="", nargs="*")
-    parser.add_argument("-u", "--user", dest="user", help="User ID to Login with (Default: admin)", default="")
+    parser.add_argument("-u", "--user", dest="user", help="User ID for login", default="")
     parser.add_argument("-k", "--keyring", dest="keyring", help="Pull password from local keyring (by hostname)", action="store_true")
     parser.add_argument("-p", "--password", dest="change_password", help="Change keyring password via interactive login", action="store_true")
     parser.add_argument("-d", dest="debug", help=argparse.SUPPRESS, action="store_true")
