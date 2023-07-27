@@ -215,13 +215,12 @@ def main():
     parser.add_argument("host", help="Hostname or IP of the ASA", default="", nargs="*")
     parser.add_argument("-u", "--user", dest="user", help="User ID to Login with (Default: admin)", default="")
     parser.add_argument("-k", "--keyring", dest="keyring", help="Pull password from local keyring (by hostname)", action="store_true")
-    parser.add_argument("-p", "--password", dest="password", help="Password for User ID (interactive login is default)", default="")
+    parser.add_argument("-p", "--password", dest="change_password", help="Change keyring password via interactive login", action="store_true")
     parser.add_argument("-d", dest="debug", help=argparse.SUPPRESS, action="store_true")
-    parser.add_argument("-f", dest="file", help=argparse.SUPPRESS, action="store_true")
     args = parser.parse_args()
 
     username=args.user
-    password=args.password
+    password=""
 
     if args.debug:
         global DEBUG 
@@ -237,12 +236,12 @@ def main():
         hostname=args.host.split('@')[1]
     while not username:
         username = getpass.getuser('Username: ')
-    if args.keyring or (not password and AUTO_KEYCHAIN):
+    if (args.keyring or AUTO_KEYCHAIN) and not args.change_password:
         print("Pulling password from local keyring.")
         password=keyring.get_password(KEYRING, hostname)
         dprint ("password=keyring.get_password(%s, %s) == %s" % (KEYRING, hostname, password))
         if not password:
-            print("Passoword for %s not found in keyring\n" % hostname)
+            print("Password for %s not found in keyring\n" % hostname)
     while not password:
         password = getpass.getpass('Password: ')
   
