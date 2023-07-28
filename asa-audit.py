@@ -7,6 +7,7 @@ import argparse
 import keyring
 import getpass
 from netmiko import Netmiko
+from netmiko import NetMikoAuthenticationException
 from datetime import datetime
 
 # Our sole global variable
@@ -244,17 +245,28 @@ def main():
             print("Password for %s not found in keyring\n" % hostname)
     while not password:
         password = getpass.getpass('Password: ')
-  
-    try:
-        print("Logging into %s" % hostname)
-        ssh_connection = Netmiko(host=hostname, username=username, password=password, device_type='cisco_asa')
-        ssh_connection.find_prompt()         # Expects to receive prompt back from the ASA
-        ssh_connection.send_command('term pager 0')
-    except Exception as e:                  # If login fails loops to begining displaying the error message
-        print(e)
+
+    notloggedin = True
+    while notloggedin:
+        try:
+            print("Logging into %s" % hostname)
+            ssh_connection = Netmiko(host=hostname, username=username, password=password, device_type='cisco_asa')
+            notloggedin = False
+        except NetMikoAuthenticationException as e: # Catch any authorization errors
+            print ("\n!! Authorization Error\n")
+            dprint (e)
+            notloggedin = True
+            password  = ""
+            while not password: 
+                password = getpass.getpass('Password: ')
+        except Exception as e:                  # If login fails loops to begining displaying the error message
+            print(e)
     
     if SAVE_CREDS_TO_KEYRING:
         keyring.set_password(KEYRING, hostname, password)
+
+    ssh_connection.find_prompt()         # Expects to receive prompt back from the ASA
+    ssh_connection.send_command('term pager 0')
 
     print("Retrieving show running-configuration")
     asa_config = ssh_connection.send_command('show run').split("\n")
