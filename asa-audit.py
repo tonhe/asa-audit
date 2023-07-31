@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import sys
 import re
 import argparse
 import keyring
@@ -24,7 +23,7 @@ class ItemCount:
                         count[policy_name] = 1
                     else:
                         continue
-                elif 'default-group-policy ' + policy_name in line:
+                elif f'default-group-policy {policy_name}' in line:
                     if not policy_name in count:
                         count[policy_name] = 1
                     else:
@@ -69,7 +68,7 @@ class ItemCount:
 
 def dprint(line):
     if DEBUG:
-        print("(d) %s" % line)
+        print(f"(d) {line}")
 
 def identify_items(config): # count all unique configuration types
     obj_names = {} # object names
@@ -123,25 +122,25 @@ def remove_dict(item_count): # generate a list of dict items that arne't used
 def gen_rmlist_config(lists, list_type): # generate the config to remove list items
     config = []
     if len(lists) > 0:
-        config.append("\n--- %s ---" % list_type)
+        config.append(f"\n--- {list_type} ---")
     for list in lists:
-            config.append("clear configure %s %s" % (list_type, list))
+            config.append(f"clear configure {list_type} {list}")
     return config
 
 def gen_rmdict_config(dicts, dict_type): # generate the configu to remove dict items
     config = []
     if len(dicts) > 0:
-        config.append("\n--- %s ---" % dict_type)
+        config.append(f"\n--- {dict_type} ---")
     for dict_type,names in list(dicts.items()):
         for name in names:
-            config.append("no %s %s" % ((dict_type + " " + dict_type), name))
+            config.append(f"no {dict_type} {dict_type} {name}")
     return config
         
 def find_remark_task(hash,acl):
     dead_ace=[]
     for acl_line in range(len(acl)):
         ace = acl[acl_line]
-        if ("0x" + hash) in ace:
+        if f'0x{hash}' in ace:
             remark_line=acl_line
             while True:
                 if remark_line > 1:
@@ -205,7 +204,7 @@ def main():
     SAVE_CREDS_TO_KEYRING = True # Do we save all of our creds to the keyring by default?
     AUTO_KEYCHAIN = True # Automagicallu try the keychain if no password supplied
 
-    print("\n\n# ASA Audit v%s 2023 - Tony Mattke @tonhe" % (VERSION))
+    print(f"\n\n# ASA Audit v{VERSION} 2023 - Tony Mattke @tonhe")
     print("-----------------------------------------------------------\n")
 
     parser = argparse.ArgumentParser()
@@ -238,16 +237,16 @@ def main():
     if (args.keyring or AUTO_KEYCHAIN) and not args.change_password:
         print("Pulling password from local keyring.")
         password=keyring.get_password(KEYRING, hostname)
-        dprint ("password=keyring.get_password(%s, %s) == %s" % (KEYRING, hostname, password))
+        dprint (f"password=keyring.get_password({KEYRING}, {hostname} )")
         if not password:
-            print("Password for %s not found in keyring\n" % hostname)
+            print(f"Password for {hostname} not found in keyring\n")
     while not password:
         password = getpass.getpass('Password: ')
 
     notloggedin = True
     while notloggedin:
         try:
-            print("Logging into %s" % hostname)
+            print(f"Logging into {hostname}")
             ssh_connection = Netmiko(host=hostname, username=username, password=password, device_type='cisco_asa')
             notloggedin = False
         except NetMikoAuthenticationException as e: # Catch any authorization errors
@@ -281,20 +280,20 @@ def main():
         #acl_names.append("INSIDE-IN")
         print("Gathering all sh access-list / brief")
         for acl in acl_names:
-            print(" - " + acl + ".", end='')
-            sh_acls[acl] = ssh_connection.send_command("show access-list %s " % acl).split("\n")
+            print(f" - {acl}.", end='')
+            sh_acls[acl] = ssh_connection.send_command(f"show access-list {acl}").split("\n")
             print(".", end='')
-            sh_briefs[acl] = ssh_connection.send_command("show access-list %s brief " % acl).split("\n")
+            sh_briefs[acl] = ssh_connection.send_command(f"show access-list {acl} brief").split("\n")
             print(". done")
 
     ssh_connection.disconnect()
-    print("-Disconecting from %s...\n" % hostname)
+    print(f"-Disconecting from {hostname}...\n")
 
     if DO_ACL_EVAL:
         acl_dict = {}
         print("Starting ACE Evaluations....")
         for acl in acl_names:
-            print("> Processing ACL -  %s" % acl)
+            print(f"> Processing ACL -  {acl}")
             acl_dict = get_aged_aces(acl_dict, sh_acls[acl], sh_briefs[acl])
         print("done\n")
 
@@ -302,9 +301,9 @@ def main():
         file = open("aged_acls.txt", "w")
         for task in acl_dict: 
             print(".", end="")
-            file.write("\n------- %s -------\n" % task)
+            file.write(f"\n------- {task} -------\n")
             for line in acl_dict[task]:
-                file.write("> %s\n" % line)
+                file.write(f">{line}\n")
         file.close()
         print(". done\n")
 
@@ -322,7 +321,7 @@ def main():
         file = open("unused_items.txt", "w")
         for line in unused_items: 
             print(".", end="")
-            file.write("%s\n" % line)
+            file.write(f"{line}\n")
         file.close()
         print(". done\n")
 
