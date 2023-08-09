@@ -166,7 +166,7 @@ def add_acl_to_dict(aged_acl_dict, ticket, remark, ace):  # Add an ACL to our ag
             aged_acl_dict[ticket].append(ace)
     return aged_acl_dict
 
-def old_get_aged_aces(aged_acl_dict, acl, acl_brief): # searches for ace's with zero hitcount, or 90 days since last hit
+def get_aged_aces(aged_acl_dict, acl, acl_brief): # searches for ace's with zero hitcount, or 90 days since last hit
     for ace in acl: # loop through ACL
         if "(hitcnt=" in ace: # initial check to see if we will find a hash
             ace_hash = (re.findall("[0-9a-fA-F]+\s*$", ace))[0].strip()
@@ -191,41 +191,13 @@ def old_get_aged_aces(aged_acl_dict, acl, acl_brief): # searches for ace's with 
                 break 
     return aged_acl_dict
 
-def get_aged_aces(aged_acl_dict, acl, brief_dict): # searches for ace's with zero hitcount, or 90 days since last hit
-    for ace in acl: # loop through ACL
-        if "(hitcnt=" in ace: # initial check to see if we will find a hash
-            ace_hash = (re.findall("[0-9a-fA-F]+\s*$", ace))[0].strip()
-        else:  # if there isn't a hitcnt on the ACE - we don't want to process this line
-            continue
-
-        if "(inactive)" in ace: # if inactive, I don't care about Last hit
-            continue
-        elif "(hitcnt=0)" in ace:  # if no hitcount, the hash won't up in show access-list NAME brief
-            ticket, remark = find_remark_task(ace_hash, acl)
-            aged_acl_dict = add_acl_to_dict(dict(aged_acl_dict), ticket, remark, ace)
-            continue
-        days_ago = 0
-        last_hit = datetime.fromtimestamp(int(brief_dict[ace_hash]), 16)
-        days_ago =  datetime.today() - last_hit  
-        if days_ago.days >= 10: 
-            ticket, remark = find_remark_task(ace_hash, acl)
-            aged_acl_dict = add_acl_to_dict(dict(aged_acl_dict), ticket, remark, ace)
-    return aged_acl_dict
-
-def show_brief_to_dict(shbrief): # Process our show acess-list [NAME] brief output into a dict
-    briefs_dict = {}
-    for hashes in shbrief:
-        briefs_dict[hashes.split(' ')[0]] =  hashes.split(' ')[3]
-    return briefs_dict
-
-
 ##########################################################################################################################
 ##########################################################################################################################
 
 def main():
     VERSION = "0.1.2"
     KEYRING="asa-audit"
-    DO_ACL_EVAL = False  # Do ACL evaluation of hits
+    DO_ACL_EVAL = True  # Do ACL evaluation of hits
     DO_UNUSED_EVAL = True # Do evaluation of unused configuraiton items
     SAVE_CREDS_TO_KEYRING = True # Do we save all of our creds to the keyring by default?
     AUTO_KEYCHAIN = True # Automagicallu try the keychain if no password supplied
@@ -319,8 +291,7 @@ def main():
         print("Starting ACE Evaluations....")
         for acl in acl_names:
             print(f"> Processing ACL -  {acl}")
-            aged_acl_dict = get_aged_aces(aged_acl_dict, sh_acls[acl], show_brief_to_dict(sh_briefs[acl]))
-            #aged_acl_dict = get_aged_aces(aged_acl_dict, sh_acls[acl], sh_briefs[acl])
+            aged_acl_dict = get_aged_aces(aged_acl_dict, sh_acls[acl], sh_briefs[acl])
         print("done\n")
 
         print("Writing aged_acls.txt to disk.", end="")
