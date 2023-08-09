@@ -10,7 +10,7 @@ from datetime import datetime
 # Our sole global variable
 DEBUG=False
 
-class ItemCount:
+class ASAConfig:
     def __init__(self, items, config):
         self.items = items
         self.config= config
@@ -28,7 +28,7 @@ class ItemCount:
                         count[policy_name] = 1
                     else:
                         count[policy_name] += 1
-        return count
+        return count # return a dict of group policy objects with a count of how much they're seen in the config
 
     def acl_count(self): # count usage of ACLs
         count = {}
@@ -48,7 +48,7 @@ class ItemCount:
                     if re.match(condition, line) and acl_name in line:
                         count[acl_name] += (default if count[acl_name] == 0 else increment)
                         break
-        return count
+        return count # return a dict of ACL names with a count of how much they're used
 
     def obj_count(self): # count usages of objects / objects-groups
         count = {}
@@ -61,7 +61,7 @@ class ItemCount:
                             count[type][name] = 1
                         else:
                             count[type][name] += 1
-        return count
+        return count # return a dict of objects with a count of how much they're used
 
 ##########################################################################################################################
 ##########################################################################################################################
@@ -70,7 +70,7 @@ def dprint(line):
     if DEBUG:
         print(f"(d) {line}")
 
-def identify_items(config): # count all unique configuration types
+def get_unique_items(config): # find all unique configuration types
     obj_names = {} # object names
     objgrp_names = {} #object-group names
     acl_names = [] # access-list names
@@ -101,16 +101,16 @@ def identify_items(config): # count all unique configuration types
                 continue
             elif not gp in grp_names:
                 grp_names.append(gp)
-    return(obj_names, objgrp_names, acl_names, grp_names)
+    return(obj_names, objgrp_names, acl_names, grp_names) # return names of unqiue items
 
-def remove_list(item_count): # generate a list of "list" items that aren't used
+def get_unsed_list_items(item_count): # generate a list of "list" items that aren't used
     config_list = []
     for item, count in list(item_count.items()):
         if count < 2:
             config_list.append(item)
     return config_list
 
-def remove_dict(item_count): # generate a list of dict items that arne't used
+def get_unused_dict_items(item_count): # generate a list of dict items that arne't used
     config_dict = {}
     for item in item_count:
         config_dict[item] = []
@@ -119,7 +119,7 @@ def remove_dict(item_count): # generate a list of dict items that arne't used
                 config_dict[item].append(item_name)
     return config_dict
 
-def gen_rmlist_config(lists, list_type): # generate the config to remove list items
+def generate_remove_list_config(lists, list_type): # generate the config to remove list items
     config = []
     if len(lists) > 0:
         config.append(f"\n--- {list_type} ---")
@@ -127,7 +127,7 @@ def gen_rmlist_config(lists, list_type): # generate the config to remove list it
             config.append(f"clear configure {list_type} {list}")
     return config
 
-def gen_rmdict_config(dicts, dict_type): # generate the configu to remove dict items
+def generate_remove_dict_config(dicts, dict_type): # generate the configu to remove dict items
     config = []
     if len(dicts) > 0:
         config.append(f"\n--- {dict_type} ---")
@@ -136,7 +136,7 @@ def gen_rmdict_config(dicts, dict_type): # generate the configu to remove dict i
             config.append(f"no {dict_type} {dict_type} {name}")
     return config
         
-def find_remark_task(hash,acl):
+def find_remark_task(hash,acl): # Find the remark above this ACE hash
     dead_ace=[]
     for acl_line in range(len(acl)):
         ace = acl[acl_line]
@@ -146,29 +146,27 @@ def find_remark_task(hash,acl):
                 if remark_line > 1:
                     remark_line -= 1
                 else:
-                    ticket = "Not Found"
-                    remark = "----------------------------"
-                    return  ticket, remark
+                    return  "Not Found", "--------------------------" # not found, lets return something
                 try: 
                     ticket = ""
                     ticket = (re.search("(SCTASK|INC|CHG)\d+", acl[remark_line].upper()))
                     if ticket:
-                        return ticket.group(0), acl[remark_line]
+                        return ticket.group(0), acl[remark_line] # return TASK and remark line
                 except Exception as e:
                     print(e)
 
-def add_2acl_dict(acl_dict, ticket, remark, ace): 
-    if ticket not in acl_dict:
-        acl_dict[ticket] = [remark]
-        acl_dict[ticket].append(ace)
+def add_acl_to_dict(aged_acl_dict, ticket, remark, ace):  # Add an ACL to our aged_acl_dict 
+    if ticket not in aged_acl_dict:
+        aged_acl_dict[ticket] = [remark]
+        aged_acl_dict[ticket].append(ace)
     else: 
-        if remark not in acl_dict[ticket]: 
-            acl_dict[ticket].append(remark)
-        if ace not in acl_dict[ticket]: 
-            acl_dict[ticket].append(ace)
-    return acl_dict
+        if remark not in aged_acl_dict[ticket]: 
+            aged_acl_dict[ticket].append(remark)
+        if ace not in aged_acl_dict[ticket]: 
+            aged_acl_dict[ticket].append(ace)
+    return aged_acl_dict
 
-def get_aged_aces(acl_dict, acl, acl_brief): # searches for ace's with zero hitcount, or 90 days since last hit
+def old_get_aged_aces(aged_acl_dict, acl, acl_brief): # searches for ace's with zero hitcount, or 90 days since last hit
     for ace in acl: # loop through ACL
         if "(hitcnt=" in ace: # initial check to see if we will find a hash
             ace_hash = (re.findall("[0-9a-fA-F]+\s*$", ace))[0].strip()
@@ -179,7 +177,7 @@ def get_aged_aces(acl_dict, acl, acl_brief): # searches for ace's with zero hitc
             continue
         elif "(hitcnt=0)" in ace:  # if no hitcount, the hash won't up in show access-list NAME brief
             ticket, remark = find_remark_task(ace_hash, acl)
-            acl_dict = add_2acl_dict(dict(acl_dict), ticket, remark, ace)
+            aged_acl_dict = add_acl_to_dict(dict(aged_acl_dict), ticket, remark, ace)
             continue
 
         for hashes in acl_brief: # Loop through acl_brief
@@ -189,15 +187,43 @@ def get_aged_aces(acl_dict, acl, acl_brief): # searches for ace's with zero hitc
                 days_ago =  datetime.today() - last_hit  
                 if days_ago.days >= 10: 
                     ticket, remark = find_remark_task(ace_hash, acl)
-                    acl_dict = add_2acl_dict(dict(acl_dict), ticket, remark, ace)
+                    aged_acl_dict = add_acl_to_dict(dict(aged_acl_dict), ticket, remark, ace)
                 break 
-    return acl_dict
+    return aged_acl_dict
+
+def get_aged_aces(aged_acl_dict, acl, brief_dict): # searches for ace's with zero hitcount, or 90 days since last hit
+    for ace in acl: # loop through ACL
+        if "(hitcnt=" in ace: # initial check to see if we will find a hash
+            ace_hash = (re.findall("[0-9a-fA-F]+\s*$", ace))[0].strip()
+        else:  # if there isn't a hitcnt on the ACE - we don't want to process this line
+            continue
+
+        if "(inactive)" in ace: # if inactive, I don't care about Last hit
+            continue
+        elif "(hitcnt=0)" in ace:  # if no hitcount, the hash won't up in show access-list NAME brief
+            ticket, remark = find_remark_task(ace_hash, acl)
+            aged_acl_dict = add_acl_to_dict(dict(aged_acl_dict), ticket, remark, ace)
+            continue
+        days_ago = 0
+        last_hit = datetime.fromtimestamp(int(brief_dict[ace_hash]), 16)
+        days_ago =  datetime.today() - last_hit  
+        if days_ago.days >= 10: 
+            ticket, remark = find_remark_task(ace_hash, acl)
+            aged_acl_dict = add_acl_to_dict(dict(aged_acl_dict), ticket, remark, ace)
+    return aged_acl_dict
+
+def show_brief_to_dict(shbrief): # Process our show acess-list [NAME] brief output into a dict
+    briefs_dict = {}
+    for hashes in shbrief:
+        briefs_dict[hashes.split(' ')[0]] =  hashes.split(' ')[3]
+    return briefs_dict
+
 
 ##########################################################################################################################
 ##########################################################################################################################
 
 def main():
-    VERSION = "0.1.0"
+    VERSION = "0.1.2"
     KEYRING="asa-audit"
     DO_ACL_EVAL = False  # Do ACL evaluation of hits
     DO_UNUSED_EVAL = True # Do evaluation of unused configuraiton items
@@ -240,7 +266,7 @@ def main():
         dprint (f"password=keyring.get_password({KEYRING}, {hostname} )")
         if not password:
             print(f"Password for {hostname} not found in keyring\n")
-    while not password:
+    while not password: # Just in case we still don't have a password... 
         password = getpass.getpass('Password: ')
 
     notloggedin = True
@@ -270,13 +296,12 @@ def main():
     
     print("Evaluating Configuration Items....")
     # Find all unique names for Objects, Object-Groups, ACLs, Group-Policies
-    obj_names, objgrp_names, acl_names, grp_names = identify_items(asa_config)
+    obj_names, objgrp_names, acl_names, grp_names = get_unique_items(asa_config)
 
     if DO_ACL_EVAL:
         sh_acls = {}
         sh_briefs = {}
-        # TESTING -- allows us to single out a single ACL 
-        #acl_names = []
+        #acl_names = [] # TESTING -- allows us to single out a single ACL 
         #acl_names.append("INSIDE-IN")
         print("Gathering all sh access-list / brief")
         for acl in acl_names:
@@ -290,19 +315,20 @@ def main():
     print(f"-Disconecting from {hostname}...\n")
 
     if DO_ACL_EVAL:
-        acl_dict = {}
+        aged_acl_dict = {}
         print("Starting ACE Evaluations....")
         for acl in acl_names:
             print(f"> Processing ACL -  {acl}")
-            acl_dict = get_aged_aces(acl_dict, sh_acls[acl], sh_briefs[acl])
+            aged_acl_dict = get_aged_aces(aged_acl_dict, sh_acls[acl], show_brief_to_dict(sh_briefs[acl]))
+            #aged_acl_dict = get_aged_aces(aged_acl_dict, sh_acls[acl], sh_briefs[acl])
         print("done\n")
 
         print("Writing aged_acls.txt to disk.", end="")
         file = open("aged_acls.txt", "w")
-        for task in acl_dict: 
+        for task in aged_acl_dict: 
             print(".", end="")
             file.write(f"\n------- {task} -------\n")
-            for line in acl_dict[task]:
+            for line in aged_acl_dict[task]:
                 file.write(f">{line}\n")
         file.close()
         print(". done\n")
@@ -310,11 +336,10 @@ def main():
     if DO_UNUSED_EVAL: # Identify Unused Configurations, and generate the config to remove them
         print("Searching configuration for unused items")
         unused_items = []
-        unused_items.extend(gen_rmlist_config(remove_list(ItemCount(grp_names, asa_config).grp_count()), "group-policy"))
-        unused_items.extend(gen_rmlist_config(remove_list(ItemCount(acl_names, asa_config).acl_count()), "access-list"))
-        unused_items.extend(gen_rmdict_config(remove_dict(ItemCount(objgrp_names, asa_config).obj_count()), "object-group"))
-        unused_items.extend(gen_rmdict_config(remove_dict(ItemCount(obj_names, asa_config).obj_count()), "object"))
-        #print(*unused_items, sep="\n")
+        unused_items.extend(generate_remove_list_config(get_unsed_list_items(ASAConfig(grp_names, asa_config).grp_count()), "group-policy"))
+        unused_items.extend(generate_remove_list_config(get_unsed_list_items(ASAConfig(acl_names, asa_config).acl_count()), "access-list"))
+        unused_items.extend(generate_remove_dict_config(get_unused_dict_items(ASAConfig(objgrp_names, asa_config).obj_count()), "object-group"))
+        unused_items.extend(generate_remove_dict_config(get_unused_dict_items(ASAConfig(obj_names, asa_config).obj_count()), "object"))
         print("done\n")
 
         print("Writing unused_items.txt to disk.", end="")
